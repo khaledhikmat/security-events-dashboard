@@ -1,0 +1,42 @@
+{% if events %}
+<table class="results-table">
+    <thead>
+        <tr>
+            <th>Timestamp</th>
+            <th>Source</th>
+            <th>Type</th>
+            <th>Entity</th>
+            <th>Location</th>
+            <th>Severity</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for event in events %}
+        <tr>
+            <td>{{ event.timestamp[11:19] }}</td>
+            <td>{{ event.source }}</td>
+            <td>{{ event.type }}</td>
+            <td>{{ event.sourceEntity }}</td>
+            <td>{{ event.location }}-{{ event.building }}{{ event.floor }}-{{ event.wing }}</td>
+            <td><span class="severity-badge severity-{{ event.severity }}">{{ event.severity }}</span></td>
+            <td>
+                {% if event.processedTimestamp %}
+                    <span class="status-processed">Processed</span>
+                {% elif event.skippedTimestamp %}
+                    <span class="status-skipped">Skipped</span>
+                {% elif event.ingestionTimestamp %}
+                    <span class="status-ingested">Ingested</span>
+                {% else %}
+                    <span class="status-pending">Pending</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div class="empty-state">
+    No events found matching filters.
+</div>
+{% endif %}
