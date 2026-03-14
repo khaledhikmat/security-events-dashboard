@@ -25,6 +25,8 @@
             <td>
                 {% if event.processedTimestamp %}
                     <span class="status-processed">Processed</span>
+                {% elif event.erroredTimestamp %}
+                    <span class="status-errored">Errored</span>
                 {% elif event.skippedTimestamp %}
                     <span class="status-skipped">Skipped</span>
                 {% elif event.ingestionTimestamp %}

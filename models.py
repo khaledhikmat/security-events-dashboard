@@ -31,8 +31,13 @@ class Event(Base):
     ingestionTimestamp = Column(DateTime, nullable=True)
     processedTimestamp = Column(DateTime, nullable=True)
     skippedTimestamp = Column(DateTime, nullable=True)
+    erroredTimestamp = Column(DateTime, nullable=True)
     workflowStartTimestamp = Column(DateTime, nullable=True)
     workflowStopTimestamp = Column(DateTime, nullable=True)
+
+    # Error tracking
+    errorMessage = Column(String, nullable=True)
+    errorType = Column(String, nullable=True)  # e.g., "timeout", "http_error", "network_error"
 
     # JSON column for outcome (SQLite supports JSON!)
     outcome = Column(JSON, nullable=True)

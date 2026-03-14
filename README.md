@@ -26,6 +26,22 @@ pip install -r requirements.txt
 
 ## Running the Application
 
+### 1. Seed the Database (First Time or After Schema Changes)
+
+Populate the database with 1000 sample events:
+```bash
+python seed.py
+```
+
+This will:
+- Drop all existing events
+- Create 1000 new random events with varied timestamps and processing states
+- Display progress as events are created
+
+**Note:** You need to run this manually - it's not automatic on server startup.
+
+### 2. Start the Server
+
 Start the FastAPI server:
 ```bash
 python app.py
