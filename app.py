@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import random
 import asyncio
 import uuid
+import httpx
 
 import models
 import schemas
@@ -152,7 +153,16 @@ async def lifespan(app: FastAPI):
     """
     Lifespan context manager for FastAPI.
     Starts background streaming worker on startup, stops it on shutdown.
+    Also creates a shared HTTP client for making API calls.
     """
+    # Startup: Create HTTP client with connection pooling
+    print("[HTTP] Creating shared HTTP client...")
+    app.state.http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(30.0, connect=5.0),  # 30s total, 5s connect
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+        follow_redirects=True
+    )
+
     # Startup: Create background task
     print("[Streaming] Starting background event streaming...")
     task = asyncio.create_task(streaming_worker())
@@ -170,40 +180,103 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         print("[Streaming] Worker stopped successfully")
 
+    # Shutdown: Close HTTP client
+    print("[HTTP] Closing shared HTTP client...")
+    await app.state.http_client.aclose()
+
 
 # Create FastAPI app with lifespan
 app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 
 
-async def process_event_workflow(event_id: str):
+async def process_event_workflow(event_id: str, http_client: httpx.AsyncClient):
     """
-    Background task to simulate async event processing workflow.
+    Background task to process event via external API call.
     Creates its own database session for thread safety.
-    """
-    # Simulate API call delay (3-8 seconds)
-    await asyncio.sleep(random.uniform(3, 8))
 
+    Args:
+        event_id: ID of the event to process
+        http_client: Shared HTTP client for making API requests
+    """
     # Create new session for background task (thread-safe)
     db = SessionLocal()
     try:
-        # Find the event and update it with processing results
+        # Find the event
         event = db.query(models.Event).filter(models.Event.id == event_id).first()
-        if event:
-            now = datetime.now()
+        if not event:
+            print(f"[Background] Event {event_id[:8]} not found")
+            return
 
-            # Update processing timestamps
+        # Prepare API request payload
+        api_payload = {
+            "event_id": event_id,
+            "source": event.source,
+            "type": event.type,
+            "sourceEntity": event.sourceEntity,
+            "timestamp": event.timestamp.isoformat(),
+            "location": event.location,
+            "building": event.building,
+            "floor": event.floor,
+            "wing": event.wing,
+            "severity": event.severity
+        }
+
+        # Make HTTP POST request to external API
+        # NOTE: Replace with your actual API endpoint
+        api_url = "https://api.example.com/events/process"
+
+        try:
+            print(f"[HTTP] Calling API for event {event_id[:8]}...")
+            response = await http_client.post(
+                api_url,
+                json=api_payload,
+                timeout=30.0
+            )
+            response.raise_for_status()  # Raise exception for 4xx/5xx status codes
+
+            # Parse API response
+            api_result = response.json()
+            print(f"[HTTP] API call successful for event {event_id[:8]}")
+
+            # Update event with processing results from API
+            now = datetime.now()
             event.processedTimestamp = now
             event.workflowStartTimestamp = now - timedelta(seconds=random.randint(2, 5))
             event.workflowStopTimestamp = now
 
-            # Generate outcome for the processed event
-            event.outcome = generate_outcome()
+            # Use outcome from API if provided, otherwise generate one
+            event.outcome = api_result.get("outcome", generate_outcome())
 
             db.commit()
             print(f"[Background] Event {event_id[:8]} processed successfully")
+
+        except httpx.TimeoutException as e:
+            print(f"[HTTP] Timeout calling API for event {event_id[:8]}")
+            # Mark event as errored due to timeout
+            event.erroredTimestamp = datetime.now()
+            event.errorType = "timeout"
+            event.errorMessage = f"API request timed out after 30 seconds"
+            db.commit()
+
+        except httpx.HTTPStatusError as e:
+            print(f"[HTTP] API returned error {e.response.status_code} for event {event_id[:8]}")
+            # Mark event as errored due to HTTP error
+            event.erroredTimestamp = datetime.now()
+            event.errorType = "http_error"
+            event.errorMessage = f"HTTP {e.response.status_code}: {e.response.text[:200] if hasattr(e.response, 'text') else 'Unknown error'}"
+            db.commit()
+
+        except httpx.RequestError as e:
+            print(f"[HTTP] Network error calling API for event {event_id[:8]}: {e}")
+            # Mark event as errored due to network error
+            event.erroredTimestamp = datetime.now()
+            event.errorType = "network_error"
+            event.errorMessage = f"Network error: {str(e)[:200]}"
+            db.commit()
+
     except Exception as e:
-        print(f"[Background] Error processing event {event_id[:8]}: {e}")
+        print(f"[Background] Unexpected error processing event {event_id[:8]}: {e}")
         db.rollback()
     finally:
         db.close()
@@ -337,6 +410,7 @@ async def get_event_by_id(event_id: str, db: Session = Depends(get_db)):
 
 @app.post("/api/events")
 async def create_event(
+    request: Request,
     background_tasks: BackgroundTasks,
     mode: str = "async",
     source: str = Form(...),
@@ -371,15 +445,18 @@ async def create_event(
     db.commit()
     db.refresh(event)
 
+    # Get HTTP client from app state
+    http_client = request.app.state.http_client
+
     # Handle sync vs async processing
     if mode == "sync":
         # Synchronous processing - process immediately before returning
-        await process_event_workflow(event.id)
+        await process_event_workflow(event.id, http_client)
         # Refresh to get updated data
         db.refresh(event)
     else:
         # Asynchronous processing - schedule background task
-        background_tasks.add_task(process_event_workflow, event.id)
+        background_tasks.add_task(process_event_workflow, event.id, http_client)
         print(f"[API] Event {event.id[:8]} created, scheduled for async processing")
 
     return {"status": "success", "event": {"id": event.id}, "mode": mode}

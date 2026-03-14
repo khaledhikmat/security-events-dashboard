@@ -67,6 +67,16 @@
                 </span>
             </div>
             <div class="detail-item">
+                <label>Errored Timestamp:</label>
+                <span class="detail-value">
+                    {% if event.erroredTimestamp %}
+                        {{ event.erroredTimestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        <em>No error</em>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="detail-item">
                 <label>Workflow Start:</label>
                 <span class="detail-value">
                     {% if event.workflowStartTimestamp %}
@@ -88,6 +98,22 @@
             </div>
         </div>
     </div>
+
+    {% if event.erroredTimestamp %}
+    <div class="detail-section">
+        <h3>Error Details</h3>
+        <div class="error-container">
+            <div class="detail-item">
+                <label>Error Type:</label>
+                <span class="detail-value"><span class="error-type-badge">{{ event.errorType or 'unknown' }}</span></span>
+            </div>
+            <div class="detail-item">
+                <label>Error Message:</label>
+                <span class="detail-value error-message">{{ event.errorMessage or 'No error message available' }}</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if event.outcome %}
     <div class="detail-section">
@@ -244,5 +270,36 @@
     border-radius: 3px;
     font-size: 11px;
     font-weight: 500;
+}
+
+.error-container {
+    background: #fff5f5;
+    border-left: 4px solid #dc3545;
+    padding: 16px;
+    border-radius: 4px;
+    margin-top: 12px;
+}
+
+.error-type-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #dc3545;
+    color: white;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.error-message {
+    color: #721c24;
+    font-family: monospace;
+    font-size: 13px;
+    background: #f8d7da;
+    padding: 8px;
+    border-radius: 3px;
+    display: block;
+    margin-top: 4px;
+    word-break: break-word;
 }
 </style>
