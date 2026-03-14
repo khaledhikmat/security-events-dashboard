@@ -3,14 +3,11 @@
     <thead>
         <tr>
             <th>ID</th>
+            <th>Timestamp</th>
             <th>Source</th>
             <th>Type</th>
             <th>Entity</th>
-            <th>Timestamp</th>
             <th>Location</th>
-            <th>Building</th>
-            <th>Floor</th>
-            <th>Wing</th>
             <th>Severity</th>
             <th>Status</th>
         </tr>
@@ -18,25 +15,22 @@
     <tbody>
         {% for event in results %}
         <tr>
-            <td>{{ event.id[:8] }}...</td>
+            <td><a href="#" class="event-id-link" onclick="openEventDetail('{{ event.id }}'); return false;">{{ event.id[:8] }}...</a></td>
+            <td>{{ event.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
             <td>{{ event.source }}</td>
             <td>{{ event.type }}</td>
             <td>{{ event.sourceEntity }}</td>
-            <td>{{ event.timestamp[:19] }}</td>
-            <td>{{ event.location }}</td>
-            <td>{{ event.building }}</td>
-            <td>{{ event.floor }}</td>
-            <td>{{ event.wing }}</td>
+            <td>{{ event.location }}-{{ event.building }}{{ event.floor }}-{{ event.wing }}</td>
             <td><span class="severity-badge severity-{{ event.severity }}">{{ event.severity }}</span></td>
             <td>
                 {% if event.processedTimestamp %}
-                    Processed
+                    <span class="status-processed">Processed</span>
                 {% elif event.skippedTimestamp %}
-                    Skipped
+                    <span class="status-skipped">Skipped</span>
                 {% elif event.ingestionTimestamp %}
-                    Ingested
+                    <span class="status-ingested">Ingested</span>
                 {% else %}
-                    Pending
+                    <span class="status-pending">Pending</span>
                 {% endif %}
             </td>
         </tr>

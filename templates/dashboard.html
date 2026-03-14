@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -35,7 +36,7 @@
             padding: 20px;
             margin-bottom: 20px;
             border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .section-title {
@@ -142,7 +143,7 @@
             color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .counter-card.card-1 {
@@ -295,7 +296,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0, 0, 0, 0.5);
             z-index: 1000;
         }
 
@@ -434,7 +435,7 @@
             padding: 40px;
             border-radius: 12px;
             text-align: center;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
 
         .spinner {
@@ -448,8 +449,13 @@
         }
 
         @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .spinner-text {
@@ -463,8 +469,36 @@
             color: #666;
             margin-top: 8px;
         }
+
+        .event-id-link {
+            color: #007bff;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .event-id-link:hover {
+            text-decoration: underline;
+            color: #0056b3;
+        }
+
+        .query-input.error {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+
+        .query-error-message {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .query-error-message.show {
+            display: block;
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Security Events Dashboard</h1>
@@ -530,10 +564,8 @@
         <!-- Counters -->
         <div class="section">
             <div class="section-title">Event Counters</div>
-            <div id="counters-container"
-                 hx-get="/components/counters"
-                 hx-trigger="load, every 5s"
-                 hx-include="#filter-form">
+            <div id="counters-container" hx-get="/components/counters" hx-trigger="load, every 10s"
+                hx-include="#filter-form">
                 <div class="counters-grid">
                     <div class="counter-card card-1">
                         <div class="counter-label">Overall</div>
@@ -559,10 +591,8 @@
         <!-- Recent Events -->
         <div class="section">
             <div class="section-title">Recent Events (Last 10)</div>
-            <div id="recent-events-container"
-                 hx-get="/components/recent-events"
-                 hx-trigger="load, every 5s"
-                 hx-include="#filter-form">
+            <div id="recent-events-container" hx-get="/components/recent-events" hx-trigger="load, every 10s"
+                hx-include="#filter-form">
                 <div class="empty-state">Loading...</div>
             </div>
         </div>
@@ -571,13 +601,11 @@
         <div class="section">
             <div class="section-title">Natural Language Query</div>
             <div class="query-section">
-                <form hx-post="/api/query"
-                      hx-target="#query-results"
-                      hx-swap="innerHTML">
-                    <textarea
-                        name="prompt"
-                        class="query-input"
-                        placeholder="Enter a natural language query, e.g., 'Show me high severity events from PHX location' or 'Find all door_held events in the last hour'"></textarea>
+                <form id="query-form" hx-post="/api/query" hx-target="#query-results" hx-swap="innerHTML">
+                    <textarea id="query-prompt" name="prompt" class="query-input"
+                        placeholder="Enter a natural language query, e.g., 'Show me high severity events from PHX location' or 'Find all door_held events in the last hour'"
+                        oninput="clearQueryError()"></textarea>
+                    <div id="query-error" class="query-error-message">Please enter a query before searching.</div>
                     <button type="submit" class="query-btn">Search</button>
                 </form>
                 <div id="query-results"></div>
@@ -606,7 +634,8 @@
                         </div>
                     </div>
                     <div class="mode-description">
-                        Async mode returns immediately while processing in the background. Sync mode waits 3-8 seconds for processing to complete.
+                        Async mode returns immediately while processing in the background. Sync mode waits 3-8 seconds
+                        for processing to complete.
                     </div>
                 </div>
 
@@ -695,6 +724,38 @@
         </div>
     </div>
 
+    <!-- Event ID Success Modal -->
+    <div id="event-id-modal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Event Created Successfully</h2>
+                <button class="close-btn" onclick="closeEventIdModal()">&times;</button>
+            </div>
+            <div style="text-align: center; padding: 20px 0;">
+                <p style="margin-bottom: 16px; color: #28a745; font-size: 16px; font-weight: 500;">✓ Your event has been created</p>
+                <div style="background: #f8f9fa; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #6c757d; margin-bottom: 8px;">EVENT ID</label>
+                    <code id="created-event-id" style="font-size: 14px; color: #212529; word-break: break-all;"></code>
+                </div>
+                <button class="submit-btn" onclick="viewEventDetail()" style="margin-bottom: 8px;">View Event Details</button>
+                <button class="toggle-btn" onclick="closeEventIdModal()" style="width: 100%; background: #6c757d;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Detail Modal -->
+    <div id="event-detail-modal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Event Details</h2>
+                <button class="close-btn" onclick="closeEventDetailModal()">&times;</button>
+            </div>
+            <div id="event-detail-content">
+                <div class="empty-state">Loading...</div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const EVENT_TYPES = {{ event_types | tojson }};
 
@@ -742,10 +803,54 @@
         }
 
         function updateFilters() {
+            console.log('🔄 updateFilters called');
             updateEventTypes();
-            // Trigger refresh for both counters and recent events
-            htmx.trigger('#counters-container', 'load');
-            htmx.trigger('#recent-events-container', 'load');
+
+            // Get filter form values
+            const filterForm = document.getElementById('filter-form');
+            const formData = new FormData(filterForm);
+            const params = new URLSearchParams();
+
+            // Build query parameters from form
+            for (const [key, value] of formData.entries()) {
+                params.append(key, value);
+            }
+
+            // Add unchecked checkboxes as false
+            const checkboxes = ['ingested', 'processed', 'skipped', 'outcome'];
+            checkboxes.forEach(name => {
+                if (!formData.has(name)) {
+                    params.set(name, 'false');
+                }
+            });
+
+            const queryString = params.toString();
+            console.log('📊 Filter query string:', queryString);
+
+            // Show loading indicators
+            const countersEl = document.getElementById('counters-container');
+            const eventsEl = document.getElementById('recent-events-container');
+            countersEl.style.opacity = '0.5';
+            eventsEl.style.opacity = '0.5';
+
+            // Trigger HTMX requests manually
+            console.log('🌐 Making request to /components/counters');
+            htmx.ajax('GET', `/components/counters?${queryString}`, {
+                target: '#counters-container',
+                swap: 'innerHTML'
+            }).then(() => {
+                countersEl.style.opacity = '1';
+                console.log('✅ Counters updated');
+            });
+
+            console.log('🌐 Making request to /components/recent-events');
+            htmx.ajax('GET', `/components/recent-events?${queryString}`, {
+                target: '#recent-events-container',
+                swap: 'innerHTML'
+            }).then(() => {
+                eventsEl.style.opacity = '1';
+                console.log('✅ Recent events updated');
+            });
         }
 
         async function toggleStreaming() {
@@ -783,7 +888,9 @@
             document.getElementById('spinner-overlay').classList.remove('active');
         }
 
-        function handleSubmit(e) {
+        let currentEventId = null;
+
+        async function handleSubmit(e) {
             e.preventDefault();
 
             const form = document.getElementById('event-form');
@@ -798,28 +905,118 @@
                 showSpinner();
             }
 
-            // Submit via HTMX
-            htmx.ajax('POST', url, {
-                values: Object.fromEntries(formData),
-                target: 'body',
-                swap: 'none'
-            }).then(() => {
-                handleFormComplete();
-            });
+            try {
+                // Submit via fetch instead of HTMX to get response data
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    handleFormComplete(result.event.id);
+                }
+            } catch (error) {
+                console.error('Error creating event:', error);
+                hideSpinner();
+            }
         }
 
-        function handleFormComplete() {
+        function handleFormComplete(eventId) {
             hideSpinner();
             closeModal();
+
+            // Store event ID and show success modal
+            currentEventId = eventId;
+            document.getElementById('created-event-id').textContent = eventId;
+            document.getElementById('event-id-modal').classList.add('active');
+
             // Refresh counters and recent events
             htmx.trigger('#counters-container', 'load');
             htmx.trigger('#recent-events-container', 'load');
         }
 
-        // Close modal when clicking outside
-        document.getElementById('event-modal').addEventListener('click', function(e) {
+        function closeEventIdModal() {
+            document.getElementById('event-id-modal').classList.remove('active');
+            currentEventId = null;
+        }
+
+        function viewEventDetail() {
+            if (currentEventId) {
+                closeEventIdModal();
+                openEventDetail(currentEventId);
+            }
+        }
+
+        async function openEventDetail(eventId) {
+            const modal = document.getElementById('event-detail-modal');
+            const content = document.getElementById('event-detail-content');
+
+            // Show modal with loading state
+            content.innerHTML = '<div class="empty-state">Loading...</div>';
+            modal.classList.add('active');
+
+            // Fetch event details via HTMX
+            htmx.ajax('GET', `/components/event-detail/${eventId}`, {
+                target: '#event-detail-content',
+                swap: 'innerHTML'
+            });
+        }
+
+        function closeEventDetailModal() {
+            document.getElementById('event-detail-modal').classList.remove('active');
+        }
+
+        function clearQueryError() {
+            const queryInput = document.getElementById('query-prompt');
+            const queryError = document.getElementById('query-error');
+
+            queryInput.classList.remove('error');
+            queryError.classList.remove('show');
+        }
+
+        // Intercept HTMX request for query form to validate before submission
+        document.addEventListener('htmx:configRequest', function(event) {
+            // Check if this is the query form
+            if (event.detail.elt && event.detail.elt.id === 'query-form') {
+                const queryInput = document.getElementById('query-prompt');
+                const queryError = document.getElementById('query-error');
+                const queryValue = queryInput.value.trim();
+
+                if (queryValue === '') {
+                    // Prevent the HTMX request
+                    event.preventDefault();
+
+                    // Show error state
+                    queryInput.classList.add('error');
+                    queryError.classList.add('show');
+
+                    // Focus on the input
+                    queryInput.focus();
+                } else {
+                    // Clear error state if there was any
+                    clearQueryError();
+                }
+            }
+        });
+
+        // Close modals when clicking outside
+        document.getElementById('event-modal').addEventListener('click', function (e) {
             if (e.target === this) {
                 closeModal();
+            }
+        });
+
+        document.getElementById('event-id-modal').addEventListener('click', function (e) {
+            if (e.target === this) {
+                closeEventIdModal();
+            }
+        });
+
+        document.getElementById('event-detail-modal').addEventListener('click', function (e) {
+            if (e.target === this) {
+                closeEventDetailModal();
             }
         });
 
@@ -828,4 +1025,5 @@
         updateModalEventTypes();
     </script>
 </body>
+
 </html>

@@ -12,3 +12,9 @@ ENV/
 *.swp
 *.swo
 .DS_Store
+
+# SQLite database files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal

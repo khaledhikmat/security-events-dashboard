@@ -691,6 +691,373 @@ No code changes needed in models, queries, or endpoints! 🎉
 
 ---
 
+## Topic: Background Event Streaming with FastAPI Lifespan
+
+### Requirement: Continuous Event Generation
+
+**Goal:** Create a background process that continuously generates random events and inserts them into the database every 10-100 seconds, but only when `streaming_mode == "on"`.
+
+### Why This Feature?
+
+Makes the dashboard feel "alive" and realistic:
+- Events appear automatically without manual creation
+- Counters update dynamically as new events arrive
+- Perfect for demos and testing
+- Simulates real-world event stream
+
+### Implementation Approach: FastAPI Lifespan
+
+**Why NOT use BackgroundTasks?**
+
+`BackgroundTasks` is **request-scoped** - tied to HTTP requests and cleaned up after response. NOT suitable for continuous background processes.
+
+**Correct Approach: Lifespan Context Manager**
+
+Modern FastAPI (2025) uses the **lifespan pattern** for application-wide background tasks:
+
+```python
+from contextlib import asynccontextmanager
+import asyncio
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: runs when app starts
+    print("Starting background worker...")
+    task = asyncio.create_task(streaming_worker())
+
+    yield  # Application runs here
+
+    # Shutdown: runs when app stops
+    print("Stopping background worker...")
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        print("Worker stopped")
+
+app = FastAPI(lifespan=lifespan)
+```
+
+### Complete Implementation
+
+#### 1. Event Generation Function
+
+Creates a random event and inserts into SQLite database:
+
+```python
+async def generate_and_insert_streaming_event():
+    """
+    Generate a random event and insert into database for streaming mode.
+    Creates a new database session for thread safety.
+    """
+    db = SessionLocal()
+    try:
+        # Generate random event data
+        source = random.choice(SOURCES)
+        event_type = random.choice(EVENT_TYPES[source])
+        now = datetime.now()
+
+        # Determine processing probabilities
+        ingested = random.random() > 0.1  # 90% ingested
+        processed = ingested and random.random() > 0.2  # 80% of ingested
+        skipped = ingested and not processed and random.random() > 0.5
+        has_outcome = processed and random.random() > 0.3  # 70% have outcomes
+
+        # Create event
+        event = models.Event(
+            id=str(uuid.uuid4()),
+            source=source,
+            type=event_type,
+            sourceEntity=random.choice(SOURCE_ENTITIES[source]),
+            timestamp=now,
+            location=random.choice(LOCATIONS),
+            building=random.choice(BUILDINGS),
+            floor=random.choice(FLOORS),
+            wing=random.choice(WINGS),
+            severity=random.choice(SEVERITIES),
+            ingestionTimestamp=(now + timedelta(seconds=random.randint(1, 5))) if ingested else None,
+            processedTimestamp=(now + timedelta(seconds=random.randint(10, 60))) if processed else None,
+            skippedTimestamp=(now + timedelta(seconds=random.randint(5, 30))) if skipped else None,
+            workflowStartTimestamp=(now + timedelta(seconds=random.randint(15, 70))) if has_outcome else None,
+            workflowStopTimestamp=(now + timedelta(seconds=random.randint(80, 180))) if has_outcome else None,
+            outcome=generate_outcome() if has_outcome else None
+        )
+
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+
+        print(f"[Streaming] Generated event {event.id[:8]}... ({event.source}/{event.type})")
+        return event.id
+
+    except Exception as e:
+        print(f"[Streaming] Error inserting event: {e}")
+        db.rollback()
+        return None
+    finally:
+        db.close()  # Critical: always close session
+```
+
+**Key Points:**
+- ✅ Creates **new session** for each event (thread-safe)
+- ✅ Full error handling with try/except/finally
+- ✅ Always closes database session (prevents leaks)
+- ✅ Generates realistic data with probabilities
+
+#### 2. Background Worker Loop
+
+Continuous loop that checks streaming mode and generates events:
+
+```python
+async def streaming_worker():
+    """
+    Background worker that continuously generates events when streaming_mode is 'on'.
+    Runs for the lifetime of the application.
+    """
+    print("[Streaming] Background worker started")
+
+    try:
+        while True:
+            try:
+                # Check if streaming is enabled
+                if streaming_mode == "on":
+                    # Generate and insert event
+                    await generate_and_insert_streaming_event()
+                else:
+                    print("[Streaming] Mode is OFF, skipping event generation")
+
+                # Wait random interval between 10 and 100 seconds
+                delay = random.uniform(10, 100)
+                print(f"[Streaming] Waiting {delay:.1f} seconds until next event...")
+                await asyncio.sleep(delay)
+
+            except asyncio.CancelledError:
+                # Graceful shutdown requested
+                print("[Streaming] Received shutdown signal")
+                raise
+            except Exception as e:
+                print(f"[Streaming] Unexpected error in worker loop: {e}")
+                # Continue loop even on errors, wait a bit before retrying
+                await asyncio.sleep(5)
+
+    except asyncio.CancelledError:
+        print("[Streaming] Worker shutting down gracefully")
+        raise  # Re-raise to properly exit
+```
+
+**Key Points:**
+- ✅ Reads global `streaming_mode` variable (thread-safe - Python GIL ensures atomic reads)
+- ✅ Random delay between events (10-100 seconds)
+- ✅ Handles `CancelledError` for graceful shutdown
+- ✅ Continues even if individual events fail
+- ✅ Must **re-raise** `CancelledError` to properly exit
+
+#### 3. Lifespan Context Manager
+
+Manages worker lifecycle with the application:
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Lifespan context manager for FastAPI.
+    Starts background streaming worker on startup, stops it on shutdown.
+    """
+    # Startup: Create background task
+    print("[Streaming] Starting background event streaming...")
+    task = asyncio.create_task(streaming_worker())
+
+    yield  # Application runs here
+
+    # Shutdown: Cancel background task
+    print("[Streaming] Stopping background event streaming...")
+    task.cancel()
+
+    try:
+        await asyncio.wait_for(task, timeout=5.0)
+    except asyncio.TimeoutError:
+        print("[Streaming] Worker didn't stop in time, forcing shutdown")
+    except asyncio.CancelledError:
+        print("[Streaming] Worker stopped successfully")
+
+
+# Create FastAPI app with lifespan
+app = FastAPI(lifespan=lifespan)
+```
+
+**Key Points:**
+- ✅ Uses `@asynccontextmanager` from `contextlib`
+- ✅ Creates task with `asyncio.create_task()` (not `run_in_executor`)
+- ✅ 5-second timeout for graceful shutdown
+- ✅ Proper exception handling for cancellation
+
+### Thread Safety Considerations
+
+#### Global Variable Access
+
+**Reading `streaming_mode`:**
+```python
+if streaming_mode == "on":
+    await generate_and_insert_streaming_event()
+```
+
+✅ **SAFE** - Python's GIL (Global Interpreter Lock) ensures atomic reads of simple types like strings.
+
+**Writing to `streaming_mode`:**
+```python
+@app.put("/api/streaming")
+async def toggle_streaming(mode: str):
+    global streaming_mode
+    streaming_mode = mode  # Simple assignment is atomic
+    return {"status": "success"}
+```
+
+✅ **SAFE** - Simple string assignment is atomic in Python.
+
+#### Database Session Management
+
+**Critical Pattern:**
+```python
+db = SessionLocal()  # Create new session
+try:
+    # ... database operations ...
+    db.commit()
+except Exception as e:
+    db.rollback()
+finally:
+    db.close()  # ALWAYS close
+```
+
+**Why this matters:**
+- SQLite allows only **one write** at a time
+- Creating fresh session minimizes lock duration
+- Always closing prevents connection leaks
+- Same pattern used in `process_event_workflow()`
+
+### Testing the Feature
+
+#### 1. Watch Events Being Generated
+
+```bash
+# Monitor database growth
+watch -n 5 'sqlite3 events.db "SELECT COUNT(*) FROM events;"'
+
+# View latest events
+sqlite3 events.db "SELECT id, source, type, timestamp FROM events ORDER BY timestamp DESC LIMIT 5;"
+```
+
+#### 2. Toggle Streaming Mode
+
+```bash
+# Turn off
+curl -X PUT "http://localhost:8000/api/streaming?mode=off"
+
+# Turn on
+curl -X PUT "http://localhost:8000/api/streaming?mode=on"
+```
+
+#### 3. Observe Server Logs
+
+```
+[Streaming] Starting background event streaming...
+[Streaming] Background worker started
+[Streaming] Generated event a3b4c5d6... (access/admit)
+[Streaming] Waiting 47.3 seconds until next event...
+[Streaming] Generated event 7e8f9g0h... (threat/detection_alert)
+[Streaming] Waiting 82.1 seconds until next event...
+^C
+[Streaming] Stopping background event streaming...
+[Streaming] Received shutdown signal
+[Streaming] Worker shutting down gracefully
+[Streaming] Worker stopped successfully
+```
+
+### Integration with Dashboard
+
+The dashboard's **auto-refresh** (every 10 seconds) automatically displays:
+- Increasing event counters
+- New events in "Recent Events" table
+- Realistic "live" feel without manual intervention
+
+### Comparison: Background Task Approaches
+
+| Approach | Suitable For | Our Use Case |\n|----------|--------------|-------------|\n| **BackgroundTasks** | Request-scoped tasks (email, notifications) | ❌ Wrong choice |\n| **asyncio.create_task()** | Application-wide background loops | ✅ Perfect fit |\n| **threading.Thread** | CPU-bound tasks in thread pool | ❌ Violates asyncio model |\n| **Celery/RQ** | Distributed task queues, production scale | ❌ Overkill for demo |\n| **APScheduler** | Scheduled/cron jobs | ❌ We need continuous loop |\n\n### Why asyncio.create_task() is Perfect
+
+1. ✅ **Runs in same event loop** as FastAPI (no thread conflicts)
+2. ✅ **Lifecycle management** via lifespan
+3. ✅ **Graceful cancellation** with CancelledError
+4. ✅ **No external dependencies** (built into Python)
+5. ✅ **Ideal for I/O-bound** background work (database inserts)
+
+### Common Pitfalls and Solutions
+
+#### Pitfall 1: Worker Doesn't Stop on Shutdown
+
+**Symptom:** Server hangs on Ctrl+C
+
+**Cause:** Not re-raising `CancelledError`
+
+**Solution:**
+```python
+except asyncio.CancelledError:
+    print("[Streaming] Cancelled")
+    raise  # CRITICAL: must re-raise!
+```
+
+#### Pitfall 2: Database Lock Errors
+
+**Symptom:** `sqlite3.OperationalError: database is locked`
+
+**Cause:** Long-lived database sessions
+
+**Solution:** Create fresh session per operation:
+```python
+db = SessionLocal()  # New session
+try:
+    # Quick operation
+    db.commit()
+finally:
+    db.close()  # Minimize lock time
+```
+
+#### Pitfall 3: Memory Leaks
+
+**Symptom:** Memory usage grows over time
+
+**Cause:** Database sessions not closed
+
+**Solution:** Always use try/finally:
+```python
+db = SessionLocal()
+try:
+    # ... operations ...
+finally:
+    db.close()  # Guaranteed cleanup
+```
+
+### Production Enhancements (Future)
+
+For production deployment, consider:
+
+1. **Configurable intervals** - Environment variables instead of hardcoded 10-100s
+2. **Rate limiting** - Prevent database overload
+3. **Health checks** - Monitor worker status via endpoint
+4. **Metrics** - Track event generation rate, errors
+5. **PostgreSQL** - Better concurrent write handling than SQLite
+6. **Celery/Arq** - Distributed workers for scale
+7. **Retry logic** - Exponential backoff for database errors
+
+### Key Takeaways
+
+1. ✅ **Use lifespan** for application-wide background tasks
+2. ✅ **asyncio.create_task()** for continuous loops in asyncio apps
+3. ✅ **Fresh database sessions** per operation for thread safety
+4. ✅ **Always re-raise CancelledError** for graceful shutdown
+5. ✅ **Global variable reads are safe** in Python (GIL)
+6. ❌ **Never use BackgroundTasks** for non-request tasks
+
+---
+
 ## Key Takeaways
 
 1. **For this demo app**: `List[dict]` is perfectly fine for in-memory simulation
@@ -698,6 +1065,7 @@ No code changes needed in models, queries, or endpoints! 🎉
 3. **Pydantic models**: Great for API validation, not ideal for mutable storage
 4. **SQLAlchemy**: THE standard ORM in Python, extremely powerful and mature
 5. **SQLModel**: Modern choice that unifies database models and API schemas
+6. **Background streaming**: Use FastAPI lifespan + asyncio.create_task() for continuous background processes
 
 ---
 
@@ -707,3 +1075,5 @@ No code changes needed in models, queries, or endpoints! 🎉
 - [SQLModel Documentation](https://sqlmodel.tiangolo.com/)
 - [FastAPI with Databases Tutorial](https://fastapi.tiangolo.com/tutorial/sql-databases/)
 - [Pydantic Documentation](https://docs.pydantic.dev/)
+- [FastAPI Lifespan Events](https://fastapi.tiangolo.com/advanced/events/)
+- [Python asyncio Documentation](https://docs.python.org/3/library/asyncio.html)
