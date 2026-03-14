@@ -300,6 +300,7 @@ async def get_events(
     ingested: bool = False,
     processed: bool = False,
     skipped: bool = False,
+    errored: bool = False,
     outcome: bool = False,
     db: Session = Depends(get_db)
 ):
@@ -321,6 +322,9 @@ async def get_events(
 
     if skipped:
         query = query.filter(models.Event.skippedTimestamp.isnot(None))
+
+    if errored:
+        query = query.filter(models.Event.erroredTimestamp.isnot(None))
 
     if outcome:
         query = query.filter(models.Event.outcome.isnot(None))
@@ -470,11 +474,12 @@ async def get_counters(
     ingested: bool = False,
     processed: bool = False,
     skipped: bool = False,
+    errored: bool = False,
     outcome: bool = False,
     db: Session = Depends(get_db)
 ):
     """Return counter cards HTML for HTMX polling"""
-    data = await get_events(source, eventType, ingested, processed, skipped, outcome, db)
+    data = await get_events(source, eventType, ingested, processed, skipped, errored, outcome, db)
     return templates.TemplateResponse("counters.html", {
         "request": request,
         "data": data
@@ -489,6 +494,7 @@ async def get_recent_events(
     ingested: bool = False,
     processed: bool = False,
     skipped: bool = False,
+    errored: bool = False,
     outcome: bool = False,
     db: Session = Depends(get_db)
 ):
@@ -511,16 +517,14 @@ async def get_recent_events(
     if skipped:
         query = query.filter(models.Event.skippedTimestamp.isnot(None))
 
+    if errored:
+        query = query.filter(models.Event.erroredTimestamp.isnot(None))
+
     if outcome:
         query = query.filter(models.Event.outcome.isnot(None))
 
-    # Get recent events, ordered by timestamp descending
-    # Take top 50 and randomly sample 10 to show variation
-    sorted_events = query.order_by(models.Event.timestamp.desc()).limit(50).all()
-    recent_events = random.sample(sorted_events, min(10, len(sorted_events))) if sorted_events else []
-
-    # Sort the selected 10 by timestamp again
-    recent_events = sorted(recent_events, key=lambda x: x.timestamp, reverse=True)
+    # Get recent 10 events, ordered by timestamp descending
+    recent_events = query.order_by(models.Event.timestamp.desc()).limit(10).all()
 
     return templates.TemplateResponse("recent_events.html", {
         "request": request,
