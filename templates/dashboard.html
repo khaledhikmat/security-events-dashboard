@@ -559,6 +559,11 @@
                     </div>
 
                     <div class="filter-item checkbox-item">
+                        <input type="checkbox" id="errored" name="errored" onchange="updateFilters()">
+                        <label for="errored">Errored</label>
+                    </div>
+
+                    <div class="filter-item checkbox-item">
                         <input type="checkbox" id="outcome" name="outcome" onchange="updateFilters()">
                         <label for="outcome">Outcome</label>
                     </div>
@@ -822,7 +827,7 @@
             }
 
             // Add unchecked checkboxes as false
-            const checkboxes = ['ingested', 'processed', 'skipped', 'outcome'];
+            const checkboxes = ['ingested', 'processed', 'skipped', 'errored', 'outcome'];
             checkboxes.forEach(name => {
                 if (!formData.has(name)) {
                     params.set(name, 'false');
