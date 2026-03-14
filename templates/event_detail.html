@@ -1,0 +1,248 @@
+<div class="event-detail">
+    <div class="detail-section">
+        <h3>Event Information</h3>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <label>Event ID:</label>
+                <span class="detail-value">{{ event.id }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Source:</label>
+                <span class="detail-value">{{ event.source }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Type:</label>
+                <span class="detail-value">{{ event.type }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Source Entity:</label>
+                <span class="detail-value">{{ event.sourceEntity }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Timestamp:</label>
+                <span class="detail-value">{{ event.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Location:</label>
+                <span class="detail-value">{{ event.location }}-{{ event.building }}{{ event.floor }}-{{ event.wing }}</span>
+            </div>
+            <div class="detail-item">
+                <label>Severity:</label>
+                <span class="severity-badge severity-{{ event.severity }}">{{ event.severity }}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="detail-section">
+        <h3>Processing Timeline</h3>
+        <div class="detail-grid">
+            <div class="detail-item">
+                <label>Ingestion Timestamp:</label>
+                <span class="detail-value">
+                    {% if event.ingestionTimestamp %}
+                        {{ event.ingestionTimestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        <em>Not ingested</em>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="detail-item">
+                <label>Processed Timestamp:</label>
+                <span class="detail-value">
+                    {% if event.processedTimestamp %}
+                        {{ event.processedTimestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        <em>Not processed</em>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="detail-item">
+                <label>Skipped Timestamp:</label>
+                <span class="detail-value">
+                    {% if event.skippedTimestamp %}
+                        {{ event.skippedTimestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        <em>Not skipped</em>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="detail-item">
+                <label>Workflow Start:</label>
+                <span class="detail-value">
+                    {% if event.workflowStartTimestamp %}
+                        {{ event.workflowStartTimestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        <em>N/A</em>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="detail-item">
+                <label>Workflow Stop:</label>
+                <span class="detail-value">
+                    {% if event.workflowStopTimestamp %}
+                        {{ event.workflowStopTimestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+                    {% else %}
+                        <em>N/A</em>
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {% if event.outcome %}
+    <div class="detail-section">
+        <h3>Outcome</h3>
+
+        {% if event.outcome.immediate %}
+        <div class="outcome-category">
+            <h4>Immediate Actions</h4>
+            <ul class="outcome-list">
+                {% for action in event.outcome.immediate %}
+                <li>
+                    <strong>{{ action.title }}</strong> - {{ action.desc }}
+                    <div class="outcome-flags">
+                        {% if action.triggerAccess %}<span class="flag-badge">Trigger Access</span>{% endif %}
+                        {% if action.triggerIncidents %}<span class="flag-badge">Trigger Incidents</span>{% endif %}
+                        {% if action.notifySecurity %}<span class="flag-badge">Notify Security</span>{% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if event.outcome.shortTerm %}
+        <div class="outcome-category">
+            <h4>Short-Term Actions</h4>
+            <ul class="outcome-list">
+                {% for action in event.outcome.shortTerm %}
+                <li>
+                    <strong>{{ action.title }}</strong> - {{ action.desc }}
+                    <div class="outcome-flags">
+                        {% if action.triggerAccess %}<span class="flag-badge">Trigger Access</span>{% endif %}
+                        {% if action.triggerIncidents %}<span class="flag-badge">Trigger Incidents</span>{% endif %}
+                        {% if action.notifySecurity %}<span class="flag-badge">Notify Security</span>{% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if event.outcome.longTerm and event.outcome.longTerm|length > 0 %}
+        <div class="outcome-category">
+            <h4>Long-Term Actions</h4>
+            <ul class="outcome-list">
+                {% for action in event.outcome.longTerm %}
+                <li>
+                    <strong>{{ action.title }}</strong> - {{ action.desc }}
+                    <div class="outcome-flags">
+                        {% if action.triggerAccess %}<span class="flag-badge">Trigger Access</span>{% endif %}
+                        {% if action.triggerIncidents %}<span class="flag-badge">Trigger Incidents</span>{% endif %}
+                        {% if action.notifySecurity %}<span class="flag-badge">Notify Security</span>{% endif %}
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="detail-section">
+        <h3>Outcome</h3>
+        <p><em>No outcome data available</em></p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.event-detail {
+    padding: 0;
+}
+
+.detail-section {
+    margin-bottom: 24px;
+}
+
+.detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.detail-section h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #2c3e50;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 8px;
+}
+
+.detail-section h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #495057;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.detail-item label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+}
+
+.detail-value {
+    font-size: 14px;
+    color: #212529;
+}
+
+.detail-value em {
+    color: #adb5bd;
+}
+
+.outcome-category {
+    margin-bottom: 16px;
+}
+
+.outcome-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.outcome-list li {
+    background: #f8f9fa;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    border-left: 3px solid #007bff;
+}
+
+.outcome-flags {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.flag-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #e7f3ff;
+    color: #0056b3;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+}
+</style>
