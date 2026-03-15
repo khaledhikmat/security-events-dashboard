@@ -59,9 +59,10 @@ def generate_outcome():
     }
 
 
-async def generate_and_insert_streaming_event():
+async def generate_and_insert_streaming_event(http_client: httpx.AsyncClient):
     """
     Generate a random event and insert into database for streaming mode.
+    Then process it through the HTTP workflow.
     Creates a new database session for thread safety.
     """
     db = SessionLocal()
@@ -71,13 +72,8 @@ async def generate_and_insert_streaming_event():
         event_type = random.choice(EVENT_TYPES[source])
         now = datetime.now()
 
-        # Determine processing probabilities
-        ingested = random.random() > 0.1  # 90% ingested
-        processed = ingested and random.random() > 0.2  # 80% of ingested are processed
-        skipped = ingested and not processed and random.random() > 0.5  # Some are skipped
-        has_outcome = processed and random.random() > 0.3  # 70% of processed have outcomes
-
-        # Create event
+        # Create event with only basic fields and ingestionTimestamp
+        # Processing will be handled by process_event_workflow
         event = models.Event(
             id=str(uuid.uuid4()),
             source=source,
@@ -89,12 +85,7 @@ async def generate_and_insert_streaming_event():
             floor=random.choice(FLOORS),
             wing=random.choice(WINGS),
             severity=random.choice(SEVERITIES),
-            ingestionTimestamp=(now + timedelta(seconds=random.randint(1, 5))) if ingested else None,
-            processedTimestamp=(now + timedelta(seconds=random.randint(10, 60))) if processed else None,
-            skippedTimestamp=(now + timedelta(seconds=random.randint(5, 30))) if skipped else None,
-            workflowStartTimestamp=(now + timedelta(seconds=random.randint(15, 70))) if has_outcome else None,
-            workflowStopTimestamp=(now + timedelta(seconds=random.randint(80, 180))) if has_outcome else None,
-            outcome=generate_outcome() if has_outcome else None
+            ingestionTimestamp=now + timedelta(seconds=1)  # Set ingestion immediately
         )
 
         db.add(event)
@@ -102,6 +93,13 @@ async def generate_and_insert_streaming_event():
         db.refresh(event)
 
         print(f"[Streaming] Generated event {event.id[:8]}... ({event.source}/{event.type})")
+
+        # Close the DB session before HTTP workflow
+        db.close()
+
+        # Process event through HTTP workflow (will handle its own DB session)
+        await process_event_workflow(event.id, http_client)
+
         return event.id
 
     except Exception as e:
@@ -109,10 +107,12 @@ async def generate_and_insert_streaming_event():
         db.rollback()
         return None
     finally:
-        db.close()
+        # Make sure DB is closed
+        if db.is_active:
+            db.close()
 
 
-async def streaming_worker():
+async def streaming_worker(http_client: httpx.AsyncClient):
     """
     Background worker that continuously generates events when streaming_mode is 'on'.
     Runs for the lifetime of the application.
@@ -125,7 +125,7 @@ async def streaming_worker():
                 # Check if streaming is enabled
                 if streaming_mode == "on":
                     # Generate and insert event
-                    await generate_and_insert_streaming_event()
+                    await generate_and_insert_streaming_event(http_client)
                 else:
                     print("[Streaming] Mode is OFF, skipping event generation")
 
@@ -165,7 +165,7 @@ async def lifespan(app: FastAPI):
 
     # Startup: Create background task
     print("[Streaming] Starting background event streaming...")
-    task = asyncio.create_task(streaming_worker())
+    task = asyncio.create_task(streaming_worker(app.state.http_client))
 
     yield  # Application runs here
 
