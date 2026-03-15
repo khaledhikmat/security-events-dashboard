@@ -208,6 +208,26 @@ async def process_event_workflow(event_id: str, http_client: httpx.AsyncClient):
             print(f"[Background] Event {event_id[:8]} not found")
             return
 
+        # Define event types that skip API call and are auto-processed
+        skip_api_types = [
+            ("access", "admit"),
+            ("incidents", "incident_resolved"),
+            ("monitoring", "device_online")
+        ]
+
+        # Check if this event type should skip API call
+        event_tuple = (event.source, event.type)
+        if event_tuple in skip_api_types:
+            # Mark as processed without API call
+            now = datetime.now()
+            event.processedTimestamp = now
+            event.workflowStartTimestamp = now - timedelta(seconds=random.randint(2, 5))
+            event.workflowStopTimestamp = now
+            event.outcome = generate_outcome()
+            db.commit()
+            print(f"[Background] Event {event_id[:8]} ({event.source}/{event.type}) auto-processed (skipped API call)")
+            return
+
         # Prepare API request payload
         api_payload = {
             "event_id": event_id,
